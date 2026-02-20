@@ -39,25 +39,39 @@ WS_PORT = 8765
 _influx = None  # dict with write_api, bucket, org, measurement, client
 
 
+def _is_usb_port(p):
+    """Return True if this port looks like a USB serial device.
+
+    Checks VID/PID first (most reliable), then falls back to device name
+    patterns for systems where pyserial doesn't populate VID/PID from sysfs
+    (common with some Linux kernel/driver combinations, e.g. CH340/CH341).
+    USB serial devices on Linux appear as /dev/ttyUSB* or /dev/ttyACM*;
+    on macOS as /dev/cu.usbserial-* or /dev/cu.usbmodem*.
+    """
+    if p.vid is not None:
+        return True
+    name = p.device.lower()
+    return any(s in name for s in ("ttyusb", "ttyacm", "cu.usb", "cu.wch"))
+
+
 def find_serial_port():
     """List available serial ports, preferring USB devices.
 
-    The TA612C has a built-in USB-to-serial converter and appears as a USB
-    serial device (vid/pid populated). We show only USB ports by default and
+    The TA612C has a built-in USB-to-serial converter (CH340/CH341) and
+    appears as a USB serial device. We show only USB ports by default and
     fall back to all ports if none are found.
     """
     all_ports = list(serial.tools.list_ports.comports())
     if not all_ports:
         return None
 
-    # Prefer USB serial ports (TA612C has a built-in USB-to-serial converter)
-    usb_ports = [p for p in all_ports if p.vid is not None]
+    usb_ports = [p for p in all_ports if _is_usb_port(p)]
     ports = usb_ports if usb_ports else all_ports
     if not usb_ports:
         print("No USB serial devices found — showing all ports:")
 
     if len(ports) == 1:
-        tag = " [USB]" if ports[0].vid is not None else ""
+        tag = " [USB]" if _is_usb_port(ports[0]) else ""
         print(f"Found serial port: {ports[0].device}{tag}  —  {ports[0].description}")
         return ports[0].device
 
