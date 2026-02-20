@@ -40,16 +40,31 @@ _influx = None  # dict with write_api, bucket, org, measurement, client
 
 
 def find_serial_port():
-    """List available serial ports. If more than one, prompt the user to pick."""
-    ports = list(serial.tools.list_ports.comports())
-    if not ports:
+    """List available serial ports, preferring USB devices.
+
+    The TA612C has a built-in USB-to-serial converter and appears as a USB
+    serial device (vid/pid populated). We show only USB ports by default and
+    fall back to all ports if none are found.
+    """
+    all_ports = list(serial.tools.list_ports.comports())
+    if not all_ports:
         return None
+
+    # Prefer USB serial ports (TA612C has a built-in USB-to-serial converter)
+    usb_ports = [p for p in all_ports if p.vid is not None]
+    ports = usb_ports if usb_ports else all_ports
+    if not usb_ports:
+        print("No USB serial devices found — showing all ports:")
+
     if len(ports) == 1:
-        print(f"Found serial port: {ports[0].device}  —  {ports[0].description}")
+        tag = " [USB]" if ports[0].vid is not None else ""
+        print(f"Found serial port: {ports[0].device}{tag}  —  {ports[0].description}")
         return ports[0].device
-    print("Multiple serial ports found:\n")
+
+    print("USB serial devices found:\n")
     for i, p in enumerate(ports, 1):
-        print(f"  [{i}]  {p.device}  —  {p.description}")
+        vid_pid = f"  VID:PID={p.vid:04X}:{p.pid:04X}" if p.vid is not None else ""
+        print(f"  [{i}]  {p.device}  —  {p.description}{vid_pid}")
     print()
     while True:
         try:
