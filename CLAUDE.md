@@ -74,5 +74,13 @@ uv run bridge.py /dev/cu.usbserial-10   # specify port
 ```
 Dependencies (`pyserial`, `websockets`, `influxdb-client`) are declared inline via PEP 723 — `uv` installs them automatically.
 
+**Linux: device not appearing as `/dev/ttyUSB0`**
+
+The TA612C uses a CH340/CH341 USB-to-serial chip. On Ubuntu/Debian, the `brltty` (Braille display) package includes udev rules that claim this chip's USB VID:PID and prevent the `ch341` driver from creating the device node. Fix:
+```bash
+sudo apt remove brltty
+```
+Unplug and replug the device — `/dev/ttyUSB0` should now appear. You also need to be in the `dialout` group (`sudo usermod -aG dialout $USER`, then log out and back in).
+
 **Optional InfluxDB logging:**
 The bridge can optionally log temperature readings to InfluxDB 2.x. At startup it prompts `Enable InfluxDB logging? [y/N]` — answering N (or pressing Enter) skips it entirely. If enabled, it parses TA612C binary frames (cmd `0x01`) in a side buffer and writes points with `fields={t1: float, t2: float, t3: float, t4: float}` using the batching `WriteApi`. Raw bytes are still relayed unchanged to the WebSocket.
