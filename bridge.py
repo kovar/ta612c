@@ -222,7 +222,9 @@ def parse_ta612c_frames(buf):
                 temps = []
                 for ch in range(4):
                     raw = struct.unpack_from("<h", payload, ch * 2)[0]
-                    temps.append(raw / 10.0)
+                    temp = raw / 10.0
+                    # Out-of-range values indicate open/disconnected thermocouple
+                    temps.append(temp if -300 <= temp <= 2000 else None)
                 readings.append(tuple(temps))
 
     return readings, buf
@@ -236,7 +238,8 @@ def write_influx_temps(temps):
 
     point = Point(_influx["measurement"])
     for i, t in enumerate(temps, 1):
-        point = point.field(f"t{i}", t)
+        if t is not None:
+            point = point.field(f"t{i}", t)
     try:
         _influx["write_api"].write(
             bucket=_influx["bucket"],
