@@ -104,11 +104,18 @@ export function parseFrame(buffer) {
   return { frame: null, remaining: new Uint8Array(0) };
 }
 
+// Readings outside this range indicate an open/disconnected thermocouple.
+// All thermocouple types max out below 1820°C (R/S/B-type); the device
+// reports ~2800°C as its open-circuit sentinel.
+const OL_MAX =  2000;  // °C
+const OL_MIN = -300;   // °C
+
 /**
  * Parse real-time data payload (command 0x01).
  * 4 × 16-bit LE values, each divided by 10 for temperature in °C.
+ * Returns null for channels outside the valid range (open/disconnected).
  * @param {Uint8Array} payload — 8 bytes
- * @returns {{ channels: [number, number, number, number] }}
+ * @returns {{ channels: [number|null, number|null, number|null, number|null] }}
  */
 export function parseRealtimeData(payload) {
   if (payload.length < 8) return null;
@@ -116,7 +123,8 @@ export function parseRealtimeData(payload) {
   const channels = [];
   for (let i = 0; i < 4; i++) {
     const raw = view.getInt16(i * 2, true); // signed 16-bit LE
-    channels.push(raw / 10);
+    const temp = raw / 10;
+    channels.push(temp >= OL_MIN && temp <= OL_MAX ? temp : null);
   }
   return { channels };
 }

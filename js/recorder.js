@@ -37,7 +37,7 @@ export class Recorder {
     if (this.#data.length === 0) return false;
     const header = 'Timestamp,T1,T2,T3,T4\n';
     const rows = this.#data.map(r =>
-      `${r.timestamp},${r.channels[0]},${r.channels[1]},${r.channels[2]},${r.channels[3]}`
+      `${r.timestamp},${r.channels.map(v => v ?? '').join(',')}`
     ).join('\n');
     const csv = header + rows + '\n';
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
