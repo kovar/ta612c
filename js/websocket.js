@@ -11,7 +11,7 @@ export class WebSocketTransport extends EventTarget {
   #url = '';
   #shouldReconnect = false;
   #reconnectTimer = null;
-  static DEFAULT_URL = 'ws://localhost:8765';
+  static DEFAULT_URL = 'ws://localhost:8767';
 
   async connect(url) {
     this.#url = url || WebSocketTransport.DEFAULT_URL;
