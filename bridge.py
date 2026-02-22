@@ -172,7 +172,8 @@ def setup_influxdb():
         return None
     print("✓")
 
-    write_api = client.write_api()
+    from influxdb_client.client.write_api import SYNCHRONOUS
+    write_api = client.write_api(write_options=SYNCHRONOUS)
     _influx = {
         "client": client,
         "write_api": write_api,
@@ -228,10 +229,8 @@ def parse_ta612c_frames(buf):
         if len(buf) < 4:
             break
 
-        length = buf[3]  # total bytes after header, including length byte itself
-        # Total frame size: header(2) + cmd(1) + length bytes
-        # length includes: length_byte + payload + checksum
-        frame_size = 2 + 1 + length
+        length = buf[3]  # total bytes after the 2-byte header (cmd + length + payload + checksum)
+        frame_size = 2 + length
         if len(buf) < frame_size:
             break
 
@@ -266,9 +265,13 @@ def write_influx_temps(temps):
     from influxdb_client import Point
 
     point = Point(_influx["measurement"])
+    has_fields = False
     for i, t in enumerate(temps, 1):
         if t is not None:
             point = point.field(f"t{i}", t)
+            has_fields = True
+    if not has_fields:
+        return  # all channels open/disconnected — nothing to write
     try:
         _influx["write_api"].write(
             bucket=_influx["bucket"],
