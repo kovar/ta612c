@@ -73,37 +73,53 @@ export class WebSerialTransport extends EventTarget {
   }
 
   async #readLoop() {
-    this.#reader = this.#port.readable.getReader();
+    const GRACE_MS = 5000;
+    const RETRY_MS = 500;
     this.#readLoopRunning = true;
-    let buffer = new Uint8Array(0);
-    try {
-      while (this.#readLoopRunning) {
-        const { value, done } = await this.#reader.read();
-        if (done) break;
-        if (value) {
-          // Append to buffer
-          const merged = new Uint8Array(buffer.length + value.length);
-          merged.set(buffer);
-          merged.set(value, buffer.length);
-          buffer = merged;
-          // Try to parse frames
-          let result;
-          do {
-            result = parseFrame(buffer);
-            if (result.frame) {
-              this.#handleFrame(result.frame);
-            }
-            buffer = result.remaining;
-          } while (result.frame);
+    let graceStart = null;
+
+    while (this.#readLoopRunning) {
+      try {
+        this.#reader = this.#port.readable.getReader();
+        graceStart = null; // reader acquired — reset grace timer
+        let buffer = new Uint8Array(0); // reset on each attempt
+        while (this.#readLoopRunning) {
+          const { value, done } = await this.#reader.read();
+          if (done) break;
+          if (value) {
+            // Append to buffer
+            const merged = new Uint8Array(buffer.length + value.length);
+            merged.set(buffer);
+            merged.set(value, buffer.length);
+            buffer = merged;
+            // Try to parse frames
+            let result;
+            do {
+              result = parseFrame(buffer);
+              if (result.frame) {
+                this.#handleFrame(result.frame);
+              }
+              buffer = result.remaining;
+            } while (result.frame);
+          }
         }
+      } catch (err) {
+        if (!this.#readLoopRunning) break;
+        const now = Date.now();
+        if (graceStart === null) {
+          graceStart = now;
+          this.#emit('log', { message: 'Serial hiccup — retrying for up to 5 s…' });
+        }
+        if (now - graceStart < GRACE_MS) {
+          await new Promise(r => setTimeout(r, RETRY_MS));
+        } else {
+          this.#emit('error', { message: 'Read error: ' + err.message });
+          break;
+        }
+      } finally {
+        try { this.#reader?.releaseLock(); } catch (_) {}
+        this.#reader = null;
       }
-    } catch (err) {
-      if (this.#readLoopRunning) {
-        this.#emit('error', { message: 'Read error: ' + err.message });
-      }
-    } finally {
-      try { this.#reader.releaseLock(); } catch (_) {}
-      this.#reader = null;
     }
   }
 
