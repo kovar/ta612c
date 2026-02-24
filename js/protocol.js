@@ -78,7 +78,20 @@ export function parseFrame(buffer) {
       const frameLen = buffer[i + 3]; // total bytes after the 2-byte header
       const totalLen = 2 + frameLen; // header + everything after
       if (i + totalLen > buffer.length) {
-        // Incomplete frame — keep from header onwards
+        // Incomplete frame. Before waiting, scan ahead for a later header.
+        // If one exists, the length byte here is likely corrupt — a corrupt
+        // 0xFF length byte would otherwise stall parsing for ~20 s at 1 Hz
+        // polling while subsequent valid frames pile up in the buffer.
+        let skipped = false;
+        for (let j = i + 2; j < buffer.length - 1; j++) {
+          if (buffer[j] === 0x55 && buffer[j + 1] === 0xAA) {
+            i = j - 1; // outer for loop will increment to j
+            skipped = true;
+            break;
+          }
+        }
+        if (skipped) continue;
+        // No later header found — genuinely incomplete, wait for more data
         return { frame: null, remaining: buffer.slice(i) };
       }
       // Validate checksum (sum of all bytes except last)
