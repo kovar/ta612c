@@ -499,7 +499,7 @@ def write_influx_temps(temps):
     """Write a 4-channel temperature reading to InfluxDB."""
     if not _influx:
         return
-    from influxdb_client import Point
+    from influxdb_client import Point, WritePrecision
 
     point = Point(_influx["measurement"])
     has_fields = False
@@ -509,6 +509,7 @@ def write_influx_temps(temps):
             has_fields = True
     if not has_fields:
         return  # all channels open/disconnected — nothing to write
+    point = point.time(datetime.datetime.now(datetime.timezone.utc), WritePrecision.MILLISECONDS)
     try:
         _influx["write_api"].write(
             bucket=_influx["bucket"],
